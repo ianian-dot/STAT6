@@ -1,6 +1,6 @@
 ---
 title: 'STAT0006: ICA 1'
-student number: '19095174'
+student number: ''
 date: "Submit this .Rmd file and a (knitted) pdf copy"
 output:
   pdf_document: default
