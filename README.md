@@ -1,2 +1,4 @@
 # STAT6
-Linear models 
+
+Exploratory Analysis
+Linear models modelling and checking
