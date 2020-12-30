@@ -1,0 +1,371 @@
+---
+title: 'STAT0006: ICA 1'
+student number: '19095174'
+date: "Submit this .Rmd file and a (knitted) pdf copy"
+output:
+  pdf_document: default
+  rmarkdown::pdf_document:
+    fig_caption: yes
+    includes:
+      in_header: my_header.tex
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE, echo=FALSE}
+library('knitr')
+knitr::opts_chunk$set(echo = TRUE, results = "hide")
+knitr::opts_knit$set(root.dir = 'C://Users/ian_t/OneDrive - University College London/Uni/Year 2/Mods/STAT6/ICA 1/')
+library("ggplot2")
+library("corrplot")
+#install.packages("PerformanceAnalytics")
+library(PerformanceAnalytics)
+#install.packages("ggpubr")
+library("ggpubr")
+```
+## Question 1 : EDA 
+
+### We will explore the data in this first section 
+The outcome variable, charges, refer to the medical insurance claims made by 1338 individuals in USA. This variable is of importance to insurance companies as it can help them understand the relationship between medical payouts and personal information which allows them to be able to predict payouts and thus able to price their premiums better and manage risk, preventing insolvency or illiquidity.  
+
+```{r, echo=FALSE, results='hide'}
+insurance_data <- read.csv("insurance.csv")
+head(insurance_data)
+str(insurance_data) ## gives us data type and dimensions
+summary(insurance_data) ## gives more detail, summary stats of each variable
+summary(insurance_data$charges)
+sd(insurance_data$charges)
+```
+
+```{r, echo=FALSE, results='hide'}
+is.factor(insurance_data$sex)
+is.factor(insurance_data$smoker)
+is.factor(insurance_data$region)
+```
+
+* We have `r nrow(insurance_data)` observations with `r ncol(insurance_data)` variables, including charges - outcome variable.
+* The predictor variables are `r names(insurance_data)[-7]`
+* Charges has a wide range from 1122 to 63 770, with mean = 13 270 and standard deviation = 12 110, indicating wide spread. 
+  + There is potential right-skewness since median = 9382 is less than mean, confirmed in the plots below 
+* We can see that the columns for sex, smoker and region are all categorical, with the first two being binary, and region bring nominal
+  + Of the numeric data, we can see that children is discrete and takes few values from 0 to 5, confirmed in the univariate analysis below. The rest are continuous
+* The ages range from 18 to 64 with mean = 39.21, while BMI ranges from 15.96 to 53.13 with mean = 00.66. 
+  + The standard deviations are `r round(sd(insurance_data$age), 3)` and `r round(sd(insurance_data$bmi), 3)` respectively. (3sf)
+* As the ranges of values are quite different e.g. variance of children vs bmi/age, can consider standardising
+
+
+
+```{r, echo=FALSE, eval=FALSE}
+barplot(table(insurance_data$children))
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+insurance_data$sex <- as.factor(insurance_data$sex)
+insurance_data$smoker <- as.factor(insurance_data$smoker)
+insurance_data$region <- as.factor(insurance_data$region)
+```
+
+#### Missing data?
+```{r, }
+sapply(insurance_data, function(x) (sum(is.na(x)))) ## check for missing values
+```
+* We have no missing values
+
+##### Correlation plot allows us to quickly see the relationship between all combinations of variables
+```{r, echo=FALSE}
+numeric_cols <- unlist(lapply(insurance_data, is.numeric))
+numeric_data <- insurance_data[, numeric_cols]
+categorical_data <- insurance_data[, !numeric_cols]
+categorical_data <- cbind(categorical_data, charges = insurance_data$charges)
+
+chart.Correlation(numeric_data)
+age_plot <- ggplot(data = insurance_data, aes(y = charges, x = age, colour = sex)) + geom_point() 
+bmi_plot <- ggplot(data = insurance_data, aes(y = charges, x = bmi, colour = sex)) + geom_point() 
+# ggarrange(age_plot, bmi_plot, nrow = 1, ncol = 2)
+
+age_plot_smoker <- ggplot(data = insurance_data, aes(y = charges, x = age, colour = smoker)) + geom_point() 
+bmi_plot_smoker <- ggplot(data = insurance_data, aes(y = charges, x = bmi, colour = smoker)) + geom_point() 
+ggarrange(age_plot_smoker, bmi_plot_smoker, age_plot, bmi_plot, nrow = 2, ncol = 2)
+
+sex_plot <- ggplot(data = categorical_data, aes(x = sex, y = charges, fill = sex)) + geom_violin(draw_quantiles = c(0.5))
+smoker_plot <- ggplot(data = categorical_data, aes(x = smoker, y = charges, fill = sex)) + geom_violin(draw_quantiles = c(0.5))
+region_plot <- ggplot(data = categorical_data, aes(x = region, y = charges, fill = region)) + geom_violin(draw_quantiles = c(0.5)) + theme(axis.text.x = element_blank())
+
+ggarrange(sex_plot, smoker_plot, region_plot, 
+                       ncol = 2, nrow = 2)
+```
+
+
+```{r, echo = FALSE}
+
+```
+
+In terms of univariate distributions,
+
+* We can see that 
+  + Age is rather uniform across
+  + BMI is relatively normal with a small right skew
+  + Number of children right skewed, with `r round(nrow(subset(insurance_data, children<=2))/ nrow(insurance_data), 2)` of the observations having 2 or fewer kids
+
+* As for categories
+  + Gender is quite evenly split, as with the 4 regions (southeast slightly higher than the rest)
+  + But not for smokers, with non-smokers being `r round(sum(insurance_data$smoker == "no")/nrow(insurance_data), 2)` of the data 
+
+In terms of bivariate distributions, 
+
+* We can see that age has the strongest correlation with charges of 0.30, bmi following with 0.20 i.e. age and bmi move positively with charges 
+  + Number of children relatively poor at predicting charges
+* Upon closer inspection using ggplot, we can see that the data of charges against age seems to follow 3 distinct lines
+  + Once we colour points based on smoker, see that bottom line consists of non-smokers, top of smokers, middle mixed
+* Trends in charges against BMI seem to diverge with BMI - indicating different slopes
+  + Expounded on below, divergence due to smoking trait
+* Multicollinearity unlikely to be an issue as there are no strong linear relationships between the predictor (numeric) variables 
+* In these bivariate plots, no big differentiation between datapoints for gender
+
+#### Checking out the bivariate distributions for categorical (Violin plots)
+```{r, echo=FALSE}
+
+```
+
+* Genders are evenly distributed against charges, same applies to the different regions, therefore not giving much information on charges.
+* Smokers in general have higher charges, and are more evenly distributed than non-smokers, which are heavy at the bottom, i.e. only a few non-smokers have charges as high as that of smokers. 
+  + Male smokers have a higher average charge than female ones
+
+(488 words)
+References:
+Ellinor Jones, EDA Sketch Solutions, 2020
+
+## Question 2
+```{r, echo=FALSE}
+model_1 <- lm(formula = charges ~ age + bmi + children + as.factor(sex) + as.factor(smoker) + as.factor(region),
+              data = insurance_data)
+
+summary(model_1)
+```
+
+* The intercept = -11938.5 in USD, which is the average charges for the reference category of all categorical variables i.e. female, non smokers who stay in northeast region, and for which age, BMI and children are all equal to 0. 
+* The coefficient for children = `r round(model_1$coefficients["children"], 3)` USD per child, which is the expected increase in charges in USD for an additional child, holding all other variables constant. 
+* The coefficient for northwestregion = `r round(model_1$coefficients[7], 3)`, which is the expected difference in charges in USD for someone who stays in the northwest region compared to the northeast, keeping all other variables constant.
+
+(91 words)
+
+## Question 3
+```{r, echo=FALSE, eval=FALSE}
+levels(insurance_data$region)
+summary(model_1)
+```
+
+If we remove the dummy variable for northwest, it becomes the reference category for region. Northeast will have its own dummy variable, while the dummy variables for both southeast and southwest will remain. All coefficients of dummy variables will be changed since now we will be comparing each region category to a new reference class. 
+
+Therefore the new intercept will be the expected charges for a female non-smoker staying in the new reference region class i.e. northwest, with age, BMI and children as 0, and will be different from the previous intercept. 
+(Reference class occurs when all relevant dummies = 0)
+
+(100 words)
+
+## Question 4
+
+
+```{r, echo = FALSE}
+ggplot(data = insurance_data, aes(x = bmi, y = charges, colour = smoker)) + geom_point()
+```
+
+```{r, results="show"}
+model_2 <- lm(formula =  charges ~ age + bmi + children + as.factor(sex) + 
+    as.factor(smoker) + as.factor(region) + as.factor(smoker)*bmi, data = insurance_data)
+summary(model_2)
+```
+
+The interaction term that allows the final slope with respect to BMI (of charges) to be changed when the dummy variable of smoker = 1.
+The interaction term has coefficient of 1440 (3sf), suggesting the slope of BMI increases by 1440 USD per unit BMI for smokers vs the main effect of BMI(slope of BMI for non-smokers). 
+When smoker = 1, the interaction term becomes a coefficient of BMI which can be added to the original main effect to get a new total regression coefficient for BMI, representing the new slope of BMI for smokers. (Effect on expected charges assuming all else constant)
+
+(100 words)
+
+## Question 5
+
+```{r, results = "show"}
+model_1$coefficients
+model_2$coefficients
+```
+Regression coefficient of BMI
+
+  + Model 1 = 339 (3sf)
+  + Model 2 = 23.5 (3sf)
+  
+The difference is that in Model 1, the slope was "average out" between the smokers and non smokers, therefore a value higher than that of model 2, which measures the BMI effect on charges for non-smokers alone. 
+This also means that the standalone BMI covariate is correlated with the new interaction term, therefore changed upon the inclusion of the latter.
+
+In model 1, BMI coefficient is small but statistically significant. In model 2, BMI coefficient has a small value and high p value, therefore could be removed, but this may affect interpretation of the interaction term (interaction term evidently is useful and statistically significant). Therefore keep in both cases. 
+
+In model 2, the coefficient of sex(male) increased in magnitude, from -131 to -500 (3sf). This could be a cause of concern as it implies correlation between the sex variable and the new interaction term, i.e. omitted variable bias and causing the estimate to change. Furthermore, mean charges of man = `r mean(insurance_data[insurance_data$sex == "male", ]$charges)`,larger than that of females = `r mean(insurance_data[insurance_data$sex == "female", ]$charges)`, therefore coefficient of dummy variable should have been positive, therefore inclusion of interaction term may have worsened the bias (negatively) instead.
+
+(193 words)
+
+###############################################################################
+
+
+
+
+## Question 6: test for linearity against covariates
+
+#### For numeric covariates, as examined in the correlation plot
+```{r, echo=FALSE}
+x <- ggplot(data = insurance_data)
+
+## same for model 1 and 2
+x + geom_point(aes(x = age, y = charges)) + geom_smooth(method = "loess", aes(x = age, y = charges), colour = "red") +
+  geom_smooth(method = "lm", aes(x = age, y = charges), colour = "blue")
+x + geom_point(aes(x = bmi, y = charges)) + geom_smooth(method = "lm", aes(x = bmi, y = charges))
+x + geom_point(aes(x = children, y = charges), position = position_jitter()) + geom_smooth(method = "lm", aes(x = children, y = charges)) + scale_x_continuous(breaks = round(seq(min(insurance_data$children), max(insurance_data$children), by = 1),1))
+
+```
+
+* Charges against age
+  + Seems to be okay for linearity although the data seems to exhibit a bit of an increasing at an increasing rate - might be slightly quadratic or non-linear, as seen in the red "loess" fitted line vs blue "lm" linear line
+
+* Charges against BMI
+  + We know that there are separate trends based on smoker variable - although linearity may be okay due to averaging, there is heteroskedasticity due to an increasing variance (divergence in trends)
+  + Linearity better if interaction term included i.e. distinguish the 2 linear trends in this plot
+
+* Charges against children
+  + Linearity unclear (fitted regression line has only small positive slope), and is heteroskedastic with variance of points decreasing as number of children increase. 
+  + Inconsistency in data points - fewer as children increase, therefore increasing uncertainty
+
+
+
+```{r interaction term vs just BMI, echo=FALSE}
+a <- ggplot(data = insurance_data, aes(x = bmi, y = charges, colour = smoker)) + geom_point() +
+  geom_smooth(data = insurance_data[insurance_data$smoker == "no",], aes(x = bmi, y = charges), colour = "black", method = "lm") + 
+  geom_smooth(data = insurance_data[insurance_data$smoker == "yes",], aes(x = bmi, y = charges), colour = "brown", method = "lm")
+b <- ggplot(data = insurance_data, aes(x = bmi, y = charges)) + geom_point() + 
+  geom_smooth(data = insurance_data, aes(x = bmi, y = charges), colour = "red", method = "lm")
+
+ggarrange(ncol = 1, nrow = 2, a, b)
+```
+
+* Charges against BMI in interaction case
+  + Clear linear trends in all cases, although for non-smokers, fitted line may look close to flat
+
+
+Based on plots: Model 2 preferred 
+
+  + In the plot against BMI, with the interaction term, we can very clearly see two distinct trends between smokers and non-smokers, as differentiated by the colours in the plot
+  + For the same plot, without interaction term, the charges ~ BMI plot has increasing variance due to divergence of trends, therefore less appropriate
+
+
+
+Based on output for models: Model 2 preferred 
+
+  + Significant improvement in both R^2 and Adjusted R^2, suggesting that the additional covariate is statistically significant and improves the fit of the model (more variation of charges being explained for)
+  + F statistic improved (better overall model)
+
+
+Overall: prefer model 2
+
+  + We are able to fine-tune the BMI slope to better predict a person given that we know his details, included smoking status and BMI 
+  + Added complexity necessary to ensure OLS assumption on homoskedasticity met (constant variance when we find 2 trends based on smoking status)
+  
+  
+(300 words)
+###############################################################################  
+
+## Question 7
+```{r, results="show"}
+model_3 <- lm(formula = charges ~ age + bmi + as.factor(children) + as.factor(sex) + 
+    as.factor(smoker) + as.factor(region) + as.factor(smoker) * 
+    bmi, data = insurance_data)
+summary(model_3)
+
+```
+
+We now have more (binary) covariates which are dummy variables to represent each of the "classes" for number of kids from 1 to 5. Slight change in some of the estimates suggesting small degree of correlation between the new covariates and the existing ones.
+
+**Updated answer on coefficients**
+
+Previously, the coefficient represented the constant effect of an additional kid on charges. Now, each coefficient represents the expected difference in charges between that particular class and the reference class category (which involves 0 children), all else constant.
+E.g. expected difference of +1000(3sf) USD in charges between having 3 kids compared to no kids, ceteris paribus. 
+
+(**Original answer**
+Previously, when children was numeric, the variable represented the actual number of children, i.e. can take discrete values of natural numbers. Now, the dummy variables are binary and the number of children for each observation is represented by the corresponding "class", which represents a certain number of kids, taking a value 1 instead of 0, while all other dummies have to be 0, except for the reference case of 0 children in which all dummies are 0. )
+
+Using children as categorical instead of numeric covariate
+
+  + Advantage: The particular number of kids that a family chooses to have may be due to cultural reasons, thus each group of observations that belong to a particular number of children may come from a specific region with shared norms, distinct from that of other groups. In this event, there is no intrinsic ordering to the number of children. May be a better model since R^2 and Adjusted R^2 actually increased slightly vs Model 2
+  + Disadvantage: Becomes messy due to the larger number of covariates, may be overfitting the data too much instead of getting a general idea of how the number of children actually affects the charges in the bigger picture 
+  
+Age and BMI are continuous data and it is not logical to treat each datapoint as its own class (too many classes), therefore not feasible. Also in continuous case, cannot assign a probability to a single value.
+
+(260 words)
+
+###############################################################################
+
+## Question 8
+```{r, results="show"}
+cat("Sum for model 1: \n", sum(fitted(model_1)))
+cat("Sum for model 2: \n", sum(fitted(model_2)))
+cat("Sum for model 3: \n", sum(fitted(model_3)))
+cat("Sum for actual observations of charges: \n", sum(insurance_data$charges))
+
+```
+
+Values are the same due to the fact that the same dataset was used for all 3 models, and that the regression coefficients are calculated based on OLS, resulting in the models having the same average (predicted) charges value as the actual mean charges.(multiplied by n, same value for all)
+
+(50 words)
+
+```{r, model 1, echo=FALSE, eval=FALSE}
+## THIS CHUNK WILL NOT RUN 
+sum_actual_obs <- sum(insurance_data$charges)
+
+insurance_data$charges[1:20] == fitted(object = model_1)[1:20]
+
+
+ncol(insurance_data)
+input_data <- insurance_data[-7]
+m1_sum_pred <- sum(fitted(object = model_1))
+m2_sum_pred <- sum(fitted(object = model_2))
+m3_sum_pred <- sum(fitted(object = model_3))
+
+sum(predict(model_1, input_data))
+sum(predict(model_3, input_data))
+
+sum(fitted(model_2))
+sum(fitted(model_3)[)
+insurance_data$charges[1:10]
+
+output_df <- data.frame(m1 = fitted(model_1),
+                        m2 = fitted(model_2),
+                        m3 = fitted(model_3),
+                        actual = insurance_data$charges)
+sum <- apply(output_df, MARGIN = 2, FUN = sum)
+
+```
+
+```{r, echo=FALSE, eval=FALSE}
+par(mfrow = c(1, 2))
+hist(insurance_data$age, main = "Age distribution")
+hist(insurance_data$bmi, main = "BMI distribution")
+barplot(table(insurance_data$children), main = "Barplot of number of children")
+barplot(table(insurance_data$sex), main = "Gender")
+barplot(table(insurance_data$smoker), main = "Smoker?")
+barplot(table(insurance_data$region), main = "Regions")
+hist(insurance_data$charges)
+```
+
+```{r not sure if to include, echo=FALSE, eval=FALSE}
+## for region dummy variables
+d1 <- subset(insurance_data, region == "northeast" | region == "southeast")
+d1$region <- ifelse(d1$region == "northeast", 0, 1)
+ggplot(data = d1, aes(x = (region), y = charges)) + geom_point(position = position_jitter()) + geom_smooth(method = "lm")
+
+d2 <- subset(insurance_data, region == "northeast" | region == "southwest")
+d1$region <- ifelse(d1$region == "northeast", 0, 1)
+ggplot(data = d2, aes(x = as.factor(region), y = charges)) + geom_jitter()
+
+d3 <- subset(insurance_data, region == "northeast" | region == "northwest")
+ggplot(data = d3, aes(x = region, y = charges)) + 
+  geom_point(position = position_jitter()) +
+  geom_smooth(method = "loess", size = 1.5, linetype = "solid")
+
+
+```
