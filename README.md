@@ -1,4 +1,4 @@
 # STAT6
 
-Exploratory Analysis
+Exploratory Analysis,
 Linear models modelling and checking
