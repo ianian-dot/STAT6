@@ -150,3 +150,15 @@ comparison4n5 <- anova(gfit4, gfit5) ## btn no interaction and interaction
 # Returns an F stat of .1945 (very small) -- large p value of 66%
 # Hence cannot reject gfit4 in favour of gfit5
 
+## Check for parallel slopes (wrt age) for both genders again -- residual check
+## To be able to see all plots at once and save them, use mfrow
+
+par(mfrow = c(2,2))
+plot(gfit4)
+
+# Plot with parallel line fits for both levels 
+g1 + geom_abline(slope = 120, intercept = -1610, 
+                 color = "#00BFC4", "dashed") +
+  geom_abline(slope = 120, intercept = -1610 -163, 
+              color = "#F8766D", "dashed")
+
